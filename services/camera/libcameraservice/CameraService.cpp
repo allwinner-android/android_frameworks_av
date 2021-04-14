@@ -428,6 +428,67 @@ void CameraService::onTorchStatusChangedLocked(const String8& cameraId,
 
 Status CameraService::getNumberOfCameras(int32_t type, int32_t* numCameras) {
     ATRACE_CALL();
+    //add by fuqiang for init when calling getNumberOfCameras, start
+    mNumberOfCameras = mModule->getNumberOfCameras();
+    mNumberOfNormalCameras = mNumberOfCameras;
+    int latestStrangeCameraId = INT_MAX;
+    for (int i = 0; i < mNumberOfCameras; i++) {
+        String8 cameraId = String8::format("%d", i);
+
+        // Get camera info
+
+        struct camera_info info;
+        bool haveInfo = true;
+        status_t rc = mModule->getCameraInfo(i, &info);
+        if (rc != NO_ERROR) {
+            ALOGE("%s: Received error loading camera info for device %d, cost and"
+                    " conflicting devices fields set to defaults for this device.",
+                    __FUNCTION__, i);
+            haveInfo = false;
+        }
+
+        // Check for backwards-compatibility support
+        if (haveInfo) {
+            if (checkCameraCapabilities(i, info, &latestStrangeCameraId) != OK) {
+                delete mModule;
+                mModule = nullptr;
+                 ALOGW("%s: mModule is null !!!!!!!!!!!!!!!!!!!!!!!!!",
+                    __FUNCTION__);
+                return STATUS_ERROR(ERROR_DISCONNECTED,
+                    "mModule is null !!!!!!!!!!!!!!!!!!!!!!!!!");
+            }
+        }
+
+        // Defaults to use for cost and conflicting devices
+        int cost = 100;
+        char** conflicting_devices = nullptr;
+        size_t conflicting_devices_length = 0;
+
+        // If using post-2.4 module version, query the cost + conflicting devices from the HAL
+        if (mModule->getModuleApiVersion() >= CAMERA_MODULE_API_VERSION_2_4 && haveInfo) {
+            cost = info.resource_cost;
+            conflicting_devices = info.conflicting_devices;
+            conflicting_devices_length = info.conflicting_devices_length;
+        }
+
+        std::set<String8> conflicting;
+        for (size_t i = 0; i < conflicting_devices_length; i++) {
+            conflicting.emplace(String8(conflicting_devices[i]));
+        }
+
+        // Initialize state for each camera device
+        {
+            Mutex::Autolock lock(mCameraStatesLock);
+            mCameraStates.emplace(cameraId, std::make_shared<CameraState>(cameraId, cost,
+                    conflicting));
+        }
+
+        if (mFlashlight->hasFlashUnit(cameraId)) {
+            mTorchStatusMap.add(cameraId,
+                    ICameraServiceListener::TORCH_STATUS_AVAILABLE_OFF);
+        }
+    }
+    //add by fuqiang for init when calling getNumberOfCameras, end
     switch (type) {
         case CAMERA_TYPE_BACKWARD_COMPATIBLE:
             *numCameras = mNumberOfNormalCameras;

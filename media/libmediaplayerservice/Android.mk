@@ -5,6 +5,7 @@ LOCAL_PATH:= $(call my-dir)
 #
 
 include $(CLEAR_VARS)
+include $(LOCAL_PATH)/../libcedarx/config.mk
 
 LOCAL_SRC_FILES:=               \
     ActivityManager.cpp         \
@@ -16,6 +17,7 @@ LOCAL_SRC_FILES:=               \
     RemoteDisplay.cpp           \
     StagefrightRecorder.cpp     \
     TestPlayerStub.cpp          \
+    SimpleMediaFormatProbe.cpp
 
 LOCAL_SHARED_LIBRARIES :=       \
     libbinder                   \
@@ -37,6 +39,11 @@ LOCAL_SHARED_LIBRARIES :=       \
     libstagefright_wfd          \
     libutils                    \
     libvorbisidec               \
+    libxplayer                  \
+    libaw_output                \
+    libawmetadataretriever      \
+    libawplayer                 \
+    libisomountmanagerservice
 
 LOCAL_STATIC_LIBRARIES :=       \
     libstagefright_nuplayer     \
@@ -54,6 +61,11 @@ LOCAL_C_INCLUDES :=                                                 \
     $(TOP)/frameworks/native/include/media/hardware                 \
     $(TOP)/external/tremolo/Tremolo                                 \
     libcore/include                                                 \
+    $(TOP)/frameworks/av/media/libcedarx/android_adapter/awplayer/   \
+    $(TOP)/frameworks/av/media/libcedarx/android_adapter/output/   \
+    $(TOP)/frameworks/av/media/libcedarx/android_adapter/metadataretriever/       \
+    $(TOP)/frameworks/av/media/libcedarc/include  \
+    $(TOP)/hardware/aw/include \
 
 LOCAL_CFLAGS += -Werror -Wno-error=deprecated-declarations -Wall
 LOCAL_CLANG := true

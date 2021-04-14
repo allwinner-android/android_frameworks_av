@@ -79,7 +79,7 @@
         </MediaCodec>
         <MediaCodec name="OMX.google.h264.encoder" type="video/avc">
             <!-- profiles and levels:  ProfileBaseline : Level41 -->
-            <Limit name="size" min="16x16" max="1920x1088" />
+            <Limit name="size" min="16x16" max="1280x720" />
             <Limit name="alignment" value="2x2" />
             <Limit name="block-size" value="16x16" />
             <Limit name="blocks-per-second" range="1-244800" />

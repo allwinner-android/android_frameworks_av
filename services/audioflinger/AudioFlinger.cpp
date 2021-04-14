@@ -132,6 +132,7 @@ const char *formatToString(audio_format_t format) {
     case AUDIO_FORMAT_AC3: return "ac-3";
     case AUDIO_FORMAT_E_AC3: return "e-ac-3";
     case AUDIO_FORMAT_IEC61937: return "iec61937";
+	case AUDIO_FORMAT_DTS: return "dts";
     default:
         break;
     }
@@ -1143,6 +1144,21 @@ status_t AudioFlinger::setParameters(audio_io_handle_t ioHandle, const String8& 
             bool isOff = screenState == "off";
             if (isOff != (AudioFlinger::mScreenState & 1)) {
                 AudioFlinger::mScreenState = ((AudioFlinger::mScreenState & ~1) + 2) | isOff;
+            }
+        }
+        /* add set param for AUDIO_PARAMETER_DEVICES_OUT_ACTIVE
+         */
+        if (param.get(String8(AUDIO_PARAMETER_STREAM_ROUTING), value) == NO_ERROR
+            || param.get(String8(AUDIO_PARAMETER_RAW_DATA_OUT), value) == NO_ERROR
+            || param.get(String8(AUDIO_PARAMETER_DEVICES_OUT_ACTIVE), value) == NO_ERROR) {
+                for (uint32_t i = 0; i < mPlaybackThreads.size(); i++) {
+                    mPlaybackThreads.valueAt(i)->setParameters(keyValuePairs);
+                }
+        }
+
+        if (param.get(String8(AUDIO_PARAMETER_DEVICES_IN_ACTIVE), value) == NO_ERROR) {
+            for (uint32_t i = 0; i < mRecordThreads.size(); i++) {
+                mRecordThreads.valueAt(i)->setParameters(keyValuePairs);
             }
         }
         return final_result;

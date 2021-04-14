@@ -227,6 +227,7 @@ public:
 
             void                removeClient(wp<Client> client);
             bool                hasClient(wp<Client> client);
+            void                removeResource();
 
     enum {
         MEDIASERVER_PROCESS_DEATH = 0,
@@ -341,6 +342,7 @@ private:
         virtual status_t        dump(int fd, const Vector<String16>& args);
 
                 audio_session_t getAudioSessionId() { return mAudioSessionId; }
+                void            removeResource();
 
     private:
         class ServiceDeathNotifier: public IBinder::DeathRecipient
@@ -390,6 +392,8 @@ private:
 
         status_t setAudioAttributes_l(const Parcel &request);
 
+        uint32_t checkAndMountISO(const char *filePath);
+
         mutable     Mutex                       mLock;
                     sp<MediaPlayerBase>         mPlayer;
                     sp<MediaPlayerService>      mService;
@@ -420,6 +424,10 @@ private:
 
         sp<IBinder::DeathRecipient> mExtractorDeathListener;
         sp<IBinder::DeathRecipient> mCodecDeathListener;
+
+        sp<IBinder> isoManager;
+        bool isBlurayISO;
+
 #if CALLBACK_ANTAGONIZER
                     Antagonizer*                mAntagonizer;
 #endif

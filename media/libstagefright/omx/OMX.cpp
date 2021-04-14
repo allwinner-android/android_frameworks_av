@@ -120,8 +120,25 @@ OMX::CallbackDispatcher::~CallbackDispatcher() {
 
 void OMX::CallbackDispatcher::post(const omx_message &msg, bool realTime) {
     Mutex::Autolock autoLock(mLock);
+    // fill_buffer_done message first process than empty_buffer_done  message
+    if ((msg.type == omx_message::FILL_BUFFER_DONE) && (!(mQueue.empty()))) {
+      std::list<omx_message>::iterator it = mQueue.end();
+      do {
+        --it;
+        if ((*it).type != omx_message::EMPTY_BUFFER_DONE)
+            break;
+      } while (it != mQueue.begin());
 
-    mQueue.push_back(msg);
+      if (it == mQueue.begin() && (*it).type == omx_message::EMPTY_BUFFER_DONE) {
+        mQueue.push_front(msg);
+      } else {
+        ++it;
+        mQueue.insert(it,msg);
+      }
+    } else {
+        mQueue.push_back(msg);
+    }
+
     if (realTime) {
         mQueueChanged.signal();
     }
@@ -702,6 +719,7 @@ OMX_ERRORTYPE OMX::OnEmptyBufferDone(
     return OMX_ErrorNone;
 }
 
+
 OMX_ERRORTYPE OMX::OnFillBufferDone(
         node_id node, buffer_id buffer, OMX_IN OMX_BUFFERHEADERTYPE *pBuffer, int fenceFd) {
     ALOGV("OnFillBufferDone buffer=%p", pBuffer);
@@ -715,6 +733,28 @@ OMX_ERRORTYPE OMX::OnFillBufferDone(
     msg.u.extended_buffer_data.range_length = pBuffer->nFilledLen;
     msg.u.extended_buffer_data.flags = pBuffer->nFlags;
     msg.u.extended_buffer_data.timestamp = pBuffer->nTimeStamp;
+
+    //extend for hdr
+    if(pBuffer->pOutputPortPrivate != NULL)
+    {
+
+        AW_OMX_VIDEO_HDR_INFO* pHdrInfo
+                        = (AW_OMX_VIDEO_HDR_INFO*)pBuffer->pOutputPortPrivate;
+        msg.u.extended_buffer_data.ext_matrix_coeffs            = pHdrInfo->nExtMatrixCoeffs;
+        msg.u.extended_buffer_data.ext_video_full_range_flag    = pHdrInfo->nExtVideoFullRangeFlag;
+        msg.u.extended_buffer_data.ext_transfer_characteristics
+            = pHdrInfo->nExtTransferCharacteristics;
+    }
+    else
+    {
+        msg.u.extended_buffer_data.ext_matrix_coeffs            = 0;
+        msg.u.extended_buffer_data.ext_video_full_range_flag    = 0;
+        msg.u.extended_buffer_data.ext_transfer_characteristics = 0;
+    }
+    ALOGV("*** OMX-HDR: %d, %d, %d",
+           msg.u.extended_buffer_data.ext_matrix_coeffs,
+           msg.u.extended_buffer_data.ext_video_full_range_flag,
+           msg.u.extended_buffer_data.ext_transfer_characteristics );
 
     findDispatcher(node)->post(msg);
 

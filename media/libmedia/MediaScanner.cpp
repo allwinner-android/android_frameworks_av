@@ -128,6 +128,15 @@ bool MediaScanner::shouldSkipDirectory(char *path) {
     return false;
 }
 
+static bool shouldStopScanner() {
+    char state[PROPERTY_VALUE_MAX] = {0};
+    property_get("mediasw.stopscaner", state, "0");
+    if (state[0] == '1')
+        return true;
+    return false;
+}
+
+
 MediaScanResult MediaScanner::doProcessDirectory(
         char *path, int pathRemaining, MediaScannerClient &client, bool noMedia) {
     // place to copy file or directory name
@@ -232,6 +241,11 @@ MediaScanResult MediaScanner::doProcessDirectoryEntry(
         if (status) {
             return MEDIA_SCAN_RESULT_ERROR;
         }
+
+        while (shouldStopScanner()) {
+            sleep(2);
+        }
+
     }
 
     return MEDIA_SCAN_RESULT_OK;

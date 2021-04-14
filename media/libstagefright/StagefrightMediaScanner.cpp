@@ -40,7 +40,10 @@ static bool FileHasAcceptableExtension(const char *extension) {
         ".mpeg", ".ogg", ".mid", ".smf", ".imy", ".wma", ".aac",
         ".wav", ".amr", ".midi", ".xmf", ".rtttl", ".rtx", ".ota",
         ".mkv", ".mka", ".webm", ".ts", ".fl", ".flac", ".mxmf",
-        ".avi", ".mpeg", ".mpg", ".awb", ".mpga"
+        ".avi", ".mpeg", ".mpg", ".awb", ".mpga",
+        ".rmvb", ".rm", ".mov", ".flv", ".f4v", ".mp1", ".mp2",
+        ".oga", ".ape", ".omg", ".oma", ".m4v", ".wmv", ".asf",
+        ".vob", ".pmp", ".m4r", ".ra", ".m2ts", ".ac3", ".ec3", ".eac3"
     };
     static const size_t kNumValidExtensions =
         sizeof(kValidExtensions) / sizeof(kValidExtensions[0]);

@@ -31,7 +31,19 @@ extern const char *MEDIA_MIMETYPE_VIDEO_H263;
 extern const char *MEDIA_MIMETYPE_VIDEO_MPEG2;
 extern const char *MEDIA_MIMETYPE_VIDEO_RAW;
 extern const char *MEDIA_MIMETYPE_VIDEO_DOLBY_VISION;
-
+extern const char *MEDIA_MIMETYPE_VIDEO_WMV1;
+extern const char *MEDIA_MIMETYPE_VIDEO_WMV2;
+extern const char *MEDIA_MIMETYPE_VIDEO_VC1;
+extern const char *MEDIA_MIMETYPE_VIDEO_VP6;
+extern const char *MEDIA_MIMETYPE_VIDEO_S263;
+extern const char *MEDIA_MIMETYPE_VIDEO_MJPEG;
+extern const char *MEDIA_MIMETYPE_VIDEO_MPEG1;
+extern const char *MEDIA_MIMETYPE_VIDEO_MSMPEG4V1;
+extern const char *MEDIA_MIMETYPE_VIDEO_MSMPEG4V2;
+extern const char *MEDIA_MIMETYPE_VIDEO_DIVX;
+extern const char *MEDIA_MIMETYPE_VIDEO_XVID;
+extern const char *MEDIA_MIMETYPE_VIDEO_RXG2;
+extern const char *MEDIA_MIMETYPE_VIDEO_VPX;
 extern const char *MEDIA_MIMETYPE_AUDIO_AMR_NB;
 extern const char *MEDIA_MIMETYPE_AUDIO_AMR_WB;
 extern const char *MEDIA_MIMETYPE_AUDIO_MPEG;           // layer III
@@ -65,6 +77,7 @@ extern const char *MEDIA_MIMETYPE_TEXT_3GPP;
 extern const char *MEDIA_MIMETYPE_TEXT_SUBRIP;
 extern const char *MEDIA_MIMETYPE_TEXT_VTT;
 extern const char *MEDIA_MIMETYPE_TEXT_CEA_608;
+extern const char *MEDIA_MIMETYPE_VIDEO_VPX;
 extern const char *MEDIA_MIMETYPE_TEXT_CEA_708;
 extern const char *MEDIA_MIMETYPE_DATA_TIMED_ID3;
 

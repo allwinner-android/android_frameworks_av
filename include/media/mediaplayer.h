@@ -54,6 +54,9 @@ enum media_event_type {
     MEDIA_INFO              = 200,
     MEDIA_SUBTITLE_DATA     = 201,
     MEDIA_META_DATA         = 202,
+    MEDIA_GET_BUFFER_LENGTH = 300,  //softdetector
+
+    AWEXTEND_MEDIA_INFO     = 1000,
 };
 
 // Generic error codes for the media player framework.  Errors are fatal, the
@@ -83,6 +86,14 @@ enum media_error_type {
     // 2xx
     MEDIA_ERROR_NOT_VALID_FOR_PROGRESSIVE_PLAYBACK = 200,
     // 3xx
+
+    // 9xx
+    MEDIA_ERROR_OUT_OF_MEMORY = 900,
+    // 4xx
+    MEDIA_ERROR_IO = -1004,
+    MEDIA_ERROR_MALFORMED = -1007,
+    MEDIA_ERROR_UNSUPPORTED = -1010,
+    MEDIA_ERROR_TIMED_OUT = -110,
 };
 
 
@@ -134,6 +145,14 @@ enum media_info_type {
 
     //9xx
     MEDIA_INFO_TIMED_TEXT_ERROR = 900,
+
+    //4096, aw extend.
+    MEDIA_INFO_AWEXTEND_INDICATE_3D_DOUBLE_STREAM = 4096,
+
+    // add for cmcc wasu
+    MEDIA_INFO_DOWNLOAD_START = 10086,
+    MEDIA_INFO_DOWNLOAD_END   = 10087,
+    MEDIA_INFO_DOWNLOAD_ERROR = 10088,
 };
 
 
@@ -177,7 +196,20 @@ enum media_player_invoke_ids {
     INVOKE_ID_SELECT_TRACK = 4,
     INVOKE_ID_UNSELECT_TRACK = 5,
     INVOKE_ID_SET_VIDEO_SCALING_MODE = 6,
-    INVOKE_ID_GET_SELECTED_TRACK = 7
+    INVOKE_ID_GET_SELECTED_TRACK = 7,
+
+    INVOKE_ID_SET_3D_MODE = 128,
+    INVOKE_ID_GET_3D_MODE = 129,
+
+    INVOKE_ID_GET_CONTENT_ID = 1000,
+    INVOKE_ID_GET_MIME = 1001,
+    INVOKE_ID_GET_BITRATE = 1002,
+    INVOKE_ID_GET_CACHEBYTES = 1003,
+    // Keep INVOKE_ID_WASABI_DRM in sync with com.intertrust.wasabi.Drm.java!
+    INVOKE_ID_WASABI_DRM = 9876,
+
+    // Keep INVOKE_ID_PLAYREADY_DRM in sync with playready apk
+    INVOKE_ID_PLAYREADY_DRM = 9900,
 };
 
 // Keep MEDIA_TRACK_TYPE_* in sync with MediaPlayer.java.

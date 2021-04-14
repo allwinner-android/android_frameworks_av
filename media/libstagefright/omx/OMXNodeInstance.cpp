@@ -132,7 +132,9 @@ struct BufferMeta {
 
     void CopyToOMX(const OMX_BUFFERHEADERTYPE *header) {
         if (!mCopyToOmx) {
+            //add by fuqiang for camerasource encoding path,start
             return;
+            //add by fuqiang for camerasource encoding path,end
         }
 
         memcpy(header->pBuffer + header->nOffset,

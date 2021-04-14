@@ -380,6 +380,8 @@ status_t AudioTrack::set(
         format = AUDIO_FORMAT_PCM_16_BIT;
     } else if (format == AUDIO_FORMAT_IEC61937) { // HDMI pass-through?
         mAttributes.flags |= AUDIO_OUTPUT_FLAG_IEC958_NONAUDIO;
+        flags = (audio_output_flags_t) (flags | AUDIO_OUTPUT_FLAG_DIRECT);
+        ALOGV("AUDIO_FORMAT_IEC61937 SET AUDIO_OUTPUT_FLAG_DIRECT");
     }
 
     // validate parameters

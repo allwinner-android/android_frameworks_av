@@ -866,7 +866,8 @@ status_t CameraSource::reset() {
             token = IPCThreadState::self()->clearCallingIdentity();
             isTokenValid = true;
         }
-        releaseQueuedFrames();
+        stopCameraRecording();
+
         while (!mFramesBeingEncoded.empty()) {
             if (NO_ERROR !=
                 mFrameCompleteCondition.waitRelative(mLock,
@@ -875,7 +876,7 @@ status_t CameraSource::reset() {
                     mFramesBeingEncoded.size());
             }
         }
-        stopCameraRecording();
+
         if (isTokenValid) {
             IPCThreadState::self()->restoreCallingIdentity(token);
         }
@@ -889,6 +890,7 @@ status_t CameraSource::reset() {
         if (mNumGlitches > 0) {
             ALOGW("%d long delays between neighboring video frames", mNumGlitches);
         }
+        releaseQueuedFrames();
 
         CHECK_EQ(mNumFramesReceived, mNumFramesEncoded + mNumFramesDropped);
     }
@@ -1035,6 +1037,7 @@ status_t CameraSource::read(
         if (!mStarted) {
             return OK;
         }
+
         frame = *mFramesReceived.begin();
         mFramesReceived.erase(mFramesReceived.begin());
 
@@ -1251,7 +1254,9 @@ MetadataBufferType CameraSource::metaDataStoredInVideoBuffers() const {
     // buffer queue.
     switch (mVideoBufferMode) {
         case hardware::ICamera::VIDEO_BUFFER_MODE_DATA_CALLBACK_METADATA:
+            //by zhengjiangwei for Recorder in Android N
             return kMetadataBufferTypeNativeHandleSource;
+            //return kMetadataBufferTypeCameraSource;
         case hardware::ICamera::VIDEO_BUFFER_MODE_BUFFER_QUEUE:
             return kMetadataBufferTypeANWBuffer;
         default:

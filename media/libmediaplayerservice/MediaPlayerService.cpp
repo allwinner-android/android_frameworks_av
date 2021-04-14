@@ -72,6 +72,7 @@
 #include "MediaPlayerService.h"
 #include "MetadataRetrieverClient.h"
 #include "MediaPlayerFactory.h"
+#include <isomount/IISOMountManagerService.h>
 
 #include "TestPlayerStub.h"
 #include "nuplayer/NuPlayerDriver.h"
@@ -238,7 +239,7 @@ void unmarshallAudioAttributes(const Parcel& parcel, audio_attributes_t *attribu
             size_t tagSize = realTagSize > AUDIO_ATTRIBUTES_TAGS_MAX_SIZE - 1 ?
                     AUDIO_ATTRIBUTES_TAGS_MAX_SIZE - 1 : realTagSize;
             utf16_to_utf8(tags.string(), tagSize, attributes->tags,
-                    sizeof(attributes->tags) / sizeof(attributes->tags[0]));
+				sizeof(attributes->tags) / sizeof(attributes->tags[0]));
         }
     } else {
         ALOGE("unmarshallAudioAttributes() received unflattened tags, ignoring tag values");
@@ -249,6 +250,76 @@ void unmarshallAudioAttributes(const Parcel& parcel, audio_attributes_t *attribu
 
 
 namespace android {
+
+#define ISO_MOUNT_PATH "/mnt/bluray"
+static const char *BDMV_URL = "bdmv://" ISO_MOUNT_PATH;
+
+static int isoMount(sp<IBinder> binder, const char *isoPath)
+{
+    sp<IISOMountManagerService> isoManager;
+
+    if (binder.get() == NULL) {
+        const sp<IServiceManager> sm(defaultServiceManager());
+        binder = sm->getService(String16("softwinner.isomountmanager"));
+        if (binder != 0) {
+            isoManager =interface_cast<IISOMountManagerService>(binder);
+        }
+    } else {
+        isoManager =interface_cast<IISOMountManagerService>(binder);
+    }
+
+    if (isoManager.get() != NULL) {
+        isoManager->umountAll();
+
+        if (isoManager->isoMount(ISO_MOUNT_PATH, isoPath) < 0)
+        {
+            ALOGE("mount iso failed!");
+            return -1;
+        }
+        return 0;
+    }
+
+    ALOGE("isoManager is null");
+    return -1;
+}
+
+static int isoUmount(sp<IBinder> binder)
+{
+    sp<IISOMountManagerService> isoManager;
+
+    if (binder.get() == NULL) {
+        const sp<IServiceManager> sm(defaultServiceManager());
+        binder = sm->getService(String16("softwinner.isomountmanager"));
+        if (binder != 0) {
+            isoManager =interface_cast<IISOMountManagerService>(binder);
+        }
+    } else {
+        isoManager =interface_cast<IISOMountManagerService>(binder);
+    }
+
+    if (isoManager.get() != NULL) {
+        return isoManager->umountAll();
+    }
+
+    return -1;
+}
+
+uint32_t MediaPlayerService::Client::checkAndMountISO(const char *filePath)
+{
+    if (strncasecmp(filePath + strlen(filePath) - 4, ".iso", 4))
+        return 'pass';
+
+    if (isoMount(isoManager, filePath) < 0)
+        return 'fail';
+
+    if (access(ISO_MOUNT_PATH "/BDMV/STREAM", R_OK)) {
+        ALOGW("not looks like bluray");
+        isoUmount(isoManager);
+        return 'fail';
+    }
+
+    return 'good';
+}
 
 extern ALooperRoster gLooperRoster;
 
@@ -264,10 +335,60 @@ static bool checkPermission(const char* permissionString) {
 /* static */ int MediaPlayerService::AudioOutput::mMinBufferCount = 4;
 /* static */ bool MediaPlayerService::AudioOutput::mIsOnEmulator = false;
 
+static MediaPlayerService *gMediaPlayerService;
 void MediaPlayerService::instantiate() {
+    gMediaPlayerService = new MediaPlayerService();
     defaultServiceManager()->addService(
-            String16("media.player"), new MediaPlayerService());
+            String16("media.player"), gMediaPlayerService);
 }
+
+// Previous signal handler state, restored after first hit.
+static struct sigaction gOrigSigactionINT;
+static struct sigaction gOrigSigactionHUP;
+static struct sigaction gOrigSigactionQUIT;
+static struct sigaction gOrigSigactionTERM;
+
+static void handleSignal(int signo)
+{
+    ALOGD("handleSignal signo=%d, gMediaPlayerService=%p", signo, gMediaPlayerService);
+    gMediaPlayerService->removeResource();
+    switch (signo) {
+    case SIGHUP:
+    case SIGINT:
+    case SIGQUIT:
+    case SIGTERM:
+        sigaction(SIGHUP, &gOrigSigactionHUP, NULL);
+        sigaction(SIGINT, &gOrigSigactionINT, NULL);
+        sigaction(SIGQUIT, &gOrigSigactionQUIT, NULL);
+        sigaction(SIGTERM, &gOrigSigactionTERM, NULL);
+        kill(getpid(), signo);
+        break;
+    default:
+        break;
+    }
+}
+
+static void registerSigHandler()
+{
+    struct sigaction sa;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sa.sa_handler = handleSignal;
+    if (sigaction(SIGHUP, &sa, &gOrigSigactionHUP) != 0) {
+        ALOGE("Unable to configure SIGHUP handler: %s", strerror(errno));
+    }
+    if (sigaction(SIGINT, &sa, &gOrigSigactionINT) != 0) {
+        ALOGE("Unable to configure SIGINT handler: %s", strerror(errno));
+    }
+    if (sigaction(SIGQUIT, &sa, &gOrigSigactionQUIT) != 0) {
+        ALOGE("Unable to configure SIGQUIT handler: %s", strerror(errno));
+    }
+    if (sigaction(SIGTERM, &sa, &gOrigSigactionTERM) != 0) {
+        ALOGE("Unable to configure SIGTERM handler: %s", strerror(errno));
+    }
+    ALOGD("MediaPlayerService registerSigHandler");
+}
+
 
 MediaPlayerService::MediaPlayerService()
 {
@@ -289,6 +410,8 @@ MediaPlayerService::MediaPlayerService()
     BatteryNotifier::getInstance().noteResetVideo();
 
     MediaPlayerFactory::registerBuiltinFactories();
+
+    registerSigHandler();
 }
 
 MediaPlayerService::~MediaPlayerService()
@@ -414,6 +537,12 @@ status_t MediaPlayerService::Client::dump(int fd, const Vector<String16>& args)
     }
     write(fd, "\n", 1);
     return NO_ERROR;
+}
+
+void MediaPlayerService::Client::removeResource()
+{
+    mPlayer->stop();
+    mPlayer = NULL;
 }
 
 /**
@@ -564,6 +693,15 @@ bool MediaPlayerService::hasClient(wp<Client> client)
     return mClients.indexOf(client) != NAME_NOT_FOUND;
 }
 
+void MediaPlayerService::removeResource()
+{
+    Mutex::Autolock lock(mLock);
+    for (int i = 0, n = mClients.size(); i < n; ++i) {
+        sp<Client> c = mClients[i].promote();
+        if (c != 0) c->removeResource();
+    }
+}
+
 MediaPlayerService::Client::Client(
         const sp<MediaPlayerService>& service, pid_t pid,
         int32_t connId, const sp<IMediaPlayerClient>& client,
@@ -580,6 +718,7 @@ MediaPlayerService::Client::Client(
     mUID = uid;
     mRetransmitEndpointValid = false;
     mAudioAttributes = NULL;
+    isBlurayISO = false;
 
 #if CALLBACK_ANTAGONIZER
     ALOGD("create Antagonizer");
@@ -742,6 +881,19 @@ status_t MediaPlayerService::Client::setDataSource(
         }
     }
 
+    if (strncasecmp(url, "file://", 7) == 0) {
+        switch (checkAndMountISO(url + 7)) {
+            case 'pass':
+                break;
+            case 'good':
+                isBlurayISO = true;
+                url = BDMV_URL;
+                break;
+            case 'fail':
+                return UNKNOWN_ERROR;
+        }
+    }
+
     if (strncmp(url, "content://", 10) == 0) {
         // get a filedescriptor for the content Uri and
         // pass it to the setDataSource(fd) method
@@ -792,6 +944,26 @@ status_t MediaPlayerService::Client::setDataSource(int fd, int64_t offset, int64
     if (offset + length > sb.st_size) {
         length = sb.st_size - offset;
         ALOGV("calculated length = %lld", (long long)length);
+    }
+
+    // check if it is bluray
+    {
+        char fdInProc[128] = {0};
+        snprintf(fdInProc, sizeof(fdInProc), "proc/self/fd/%d", fd);
+        char filePath[1024] = {0};
+        ssize_t len = readlink(fdInProc, filePath, sizeof(filePath) - 1);
+        ALOGV("file path %s", filePath);
+        if (len > 0) {
+            switch (checkAndMountISO(filePath)) {
+                case 'pass':
+                    break;
+                case 'good':
+                    isBlurayISO = true;
+                    return setDataSource(NULL, BDMV_URL, NULL);
+                case 'fail':
+                    return UNKNOWN_ERROR;
+            }
+        }
     }
 
     player_type playerType = MediaPlayerFactory::getPlayerType(this,
@@ -991,7 +1163,13 @@ status_t MediaPlayerService::Client::stop()
     ALOGV("[%d] stop", mConnId);
     sp<MediaPlayerBase> p = getPlayer();
     if (p == 0) return UNKNOWN_ERROR;
-    return p->stop();
+
+    status_t ret = p->stop();
+
+    if (isBlurayISO)
+        isoUmount(isoManager);
+
+    return ret;
 }
 
 status_t MediaPlayerService::Client::pause()
@@ -1127,7 +1305,13 @@ status_t MediaPlayerService::Client::reset()
     mRetransmitEndpointValid = false;
     sp<MediaPlayerBase> p = getPlayer();
     if (p == 0) return UNKNOWN_ERROR;
-    return p->reset();
+
+    status_t ret = p->reset();
+
+    if (isBlurayISO)
+        isoUmount(isoManager);
+
+    return ret;
 }
 
 status_t MediaPlayerService::Client::setAudioStreamType(audio_stream_type_t type)

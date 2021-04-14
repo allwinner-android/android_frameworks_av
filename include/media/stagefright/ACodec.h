@@ -200,6 +200,10 @@ private:
         int mFenceFd;
         FrameRenderTracker::Info *mRenderInfo;
 
+        int32_t mMatrixCoeffs;
+        int32_t mVideoFullRange;
+        int32_t mTransferCharacteristics;
+
         // The following field and 4 methods are used for debugging only
         bool mIsReadFence;
         // Store |fenceFd| and set read/write flag. Log error, if there is already a fence stored.
@@ -306,6 +310,9 @@ private:
 
     OMX_INDEXTYPE mDescribeColorAspectsIndex;
     OMX_INDEXTYPE mDescribeHDRStaticInfoIndex;
+
+    OMX_U32 mExtendFlag;
+    bool mFirstPTS;
 
     status_t setCyclicIntraMacroblockRefresh(const sp<AMessage> &msg, int32_t mode);
     status_t allocateBuffersOnPort(OMX_U32 portIndex);

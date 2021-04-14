@@ -49,3 +49,6 @@ socket: 1
 connect: 1
 fcntl64: 1
 rt_tgsigqueueinfo: 1
+getdents64: 1
+pselect6: 1
+sysinfo: 1

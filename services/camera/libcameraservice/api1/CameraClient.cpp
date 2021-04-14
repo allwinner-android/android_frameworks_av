@@ -823,7 +823,7 @@ void CameraClient::dataCallbackTimestamp(nsecs_t timestamp,
     sp<CameraClient> client = static_cast<CameraClient*>(getClientFromCookie(user).get());
     if (client.get() == nullptr) return;
 
-    if (!client->lockIfMessageWanted(msgType)) return;
+    //if (!client->lockIfMessageWanted(msgType)) return;
 
     if (dataPtr == 0) {
         ALOGE("Null data returned in data with timestamp callback");

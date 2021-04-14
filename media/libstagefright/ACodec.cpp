@@ -55,6 +55,11 @@
 #include "include/DataConverter.h"
 #include "omx/OMXUtils.h"
 
+#include <hardware/sunxi_metadata_def.h>
+
+#include "vdecoder.h"
+
+
 namespace android {
 
 enum {
@@ -182,6 +187,19 @@ struct CodecObserver : public BnOMXObserver {
                             omx_msg.u.extended_buffer_data.timestamp);
                     msg->setInt32(
                             "fence_fd", omx_msg.fenceFd);
+
+                    //extend for hdr
+                    msg->setInt32("matrix_coeffs",
+                                   omx_msg.u.extended_buffer_data.ext_matrix_coeffs);
+                    msg->setInt32("video_full_range",
+                                   omx_msg.u.extended_buffer_data.ext_video_full_range_flag);
+                    msg->setInt32("transfer_characteristics",
+                                   omx_msg.u.extended_buffer_data.ext_transfer_characteristics);
+
+                    ALOGV("*** ACODEC-observer: %d, %d, %d",
+                          omx_msg.u.extended_buffer_data.ext_matrix_coeffs,
+                          omx_msg.u.extended_buffer_data.ext_video_full_range_flag,
+                          omx_msg.u.extended_buffer_data.ext_transfer_characteristics);
                     break;
                 }
 
@@ -524,7 +542,9 @@ ACodec::ACodec()
       mCreateInputBuffersSuspended(false),
       mTunneled(false),
       mDescribeColorAspectsIndex((OMX_INDEXTYPE)0),
-      mDescribeHDRStaticInfoIndex((OMX_INDEXTYPE)0) {
+      mDescribeHDRStaticInfoIndex((OMX_INDEXTYPE)0),
+      mExtendFlag(0),
+      mFirstPTS(false) {
     mUninitializedState = new UninitializedState(this);
     mLoadedState = new LoadedState(this);
     mLoadedToIdleState = new LoadedToIdleState(this);
@@ -863,6 +883,9 @@ status_t ACodec::allocateBuffersOnPort(OMX_U32 portIndex) {
                 info.mFenceFd = -1;
                 info.mRenderInfo = NULL;
                 info.mNativeHandle = NULL;
+                info.mTransferCharacteristics = 0;
+                info.mMatrixCoeffs = 0;
+                info.mVideoFullRange = 0;
 
                 uint32_t requiresAllocateBufferBit =
                     (portIndex == kPortIndexInput)
@@ -888,8 +911,15 @@ status_t ACodec::allocateBuffersOnPort(OMX_U32 portIndex) {
                     // because Widevine source only receives these base addresses.
                     const native_handle_t *native_handle_ptr =
                         native_handle == NULL ? NULL : native_handle->handle();
+                    void* dataPtr = (void *)(native_handle_ptr);
+                    if(native_handle_ptr != NULL)
+                    {
+                        if(native_handle_ptr->numFds == 0 && native_handle_ptr->numInts == 1) {
+                            dataPtr = (void*)(uintptr_t)native_handle_ptr->data[0];
+                        }
+                    }
                     info.mData = new ABuffer(
-                            ptr != NULL ? ptr : (void *)native_handle_ptr, bufSize);
+                            ptr != NULL ? ptr : (void *)dataPtr, bufSize);
                     info.mNativeHandle = native_handle;
                     info.mCodecData = info.mData;
                 } else if (mQuirks & requiresAllocateBufferBit) {
@@ -978,17 +1008,66 @@ status_t ACodec::setupNativeWindowSizeFormatAndUsage(
     }
 
     usage |= kVideoGrallocUsage;
+
+    OMX_U32 nExtendFlag = 0;
+    OMX_INDEXTYPE index = OMX_IndexComponentStartUnused;
+    err = mOMX->getExtensionIndex(
+            mNode,
+            "OMX.google.android.index.getAfbcHdrFlag",
+            &index);
+
+    ALOGD("** get afbchdr index: %d, %d, %x",err, OK, index);
+    if(err == OK)
+    {
+        OMX_U32 tmpExtendFlag[2]= {0};
+        err = mOMX->getParameter(
+                mNode, index,
+                &tmpExtendFlag, sizeof(OMX_U32)*2);
+        ALOGD("** get afbchdr nExtendFlag: %d, %d, %x, %x",err, OK,
+                 tmpExtendFlag[0], tmpExtendFlag[1]);
+
+        if(err == OK)
+            nExtendFlag = tmpExtendFlag[0];
+    }
+
+    int nPiexlFormat = 0;
+
+    if((nExtendFlag & AW_VIDEO_HDR_FLAG) || (nExtendFlag & AW_VIDEO_AFBC_FLAG))
+    {
+        ALOGD("**** set the usage :  GRALLOC_USAGE_METADATA_BUF");
+        usage |= GRALLOC_USAGE_METADATA_BUF;
+    }
+
+    if(nExtendFlag & AW_VIDEO_AFBC_FLAG)
+    {
+        ALOGD("**** set the usage :  GRALLOC_USAGE_AFBC_MODE");
+        usage |= GRALLOC_USAGE_AFBC_MODE;
+    }
+
+    if((nExtendFlag & AW_VIDEO_10BIT_FLAG)
+       && def.format.video.eColorFormat == OMX_COLOR_FormatYUV420Planar)
+    {
+        ALOGD("**** set the format :  HAL_PIXEL_FORMAT_AW_YV12_10bit");
+        nPiexlFormat = HAL_PIXEL_FORMAT_AW_YV12_10bit;
+    }
+
+    mExtendFlag = nExtendFlag;
+
     *finalUsage = usage;
 
     memset(&mLastNativeWindowCrop, 0, sizeof(mLastNativeWindowCrop));
     mLastNativeWindowDataSpace = HAL_DATASPACE_UNKNOWN;
 
     ALOGV("gralloc usage: %#x(OMX) => %#x(ACodec)", omxUsage, usage);
+
+    if(nPiexlFormat == 0)
+        nPiexlFormat = def.format.video.eColorFormat;
+
     return setNativeWindowSizeFormatAndUsage(
             nativeWindow,
             def.format.video.nFrameWidth,
             def.format.video.nFrameHeight,
-            def.format.video.eColorFormat,
+            nPiexlFormat,
             mRotationDegrees,
             usage,
             reconnect);
@@ -1122,6 +1201,10 @@ status_t ACodec::allocateOutputBuffersFromNativeWindow() {
         info.mData = new ABuffer(NULL /* data */, bufferSize /* capacity */);
         info.mCodecData = info.mData;
         info.mGraphicBuffer = graphicBuffer;
+        info.mTransferCharacteristics = 0;
+        info.mMatrixCoeffs = 0;
+        info.mVideoFullRange = 0;
+
         mBuffers[kPortIndexOutput].push(info);
 
         IOMX::buffer_id bufferId;
@@ -1197,6 +1280,9 @@ status_t ACodec::allocateOutputMetadataBuffers() {
         info.mRenderInfo = NULL;
         info.mGraphicBuffer = NULL;
         info.mDequeuedAt = mDequeueCounter;
+        info.mTransferCharacteristics = 0;
+        info.mMatrixCoeffs = 0;
+        info.mVideoFullRange = 0;
 
         sp<IMemory> mem = mDealer[kPortIndexOutput]->allocate(bufSize);
         if (mem == NULL || mem->pointer() == NULL) {
@@ -1669,6 +1755,30 @@ const char *ACodec::getComponentRole(
             "audio_decoder.flac", "audio_encoder.flac" },
         { MEDIA_MIMETYPE_AUDIO_MSGSM,
             "audio_decoder.gsm", "audio_encoder.gsm" },
+        { MEDIA_MIMETYPE_VIDEO_WMV1,
+            "video_decoder.wmv1", "video_encoder.wmv1" },
+        { MEDIA_MIMETYPE_VIDEO_WMV2,
+            "video_decoder.wmv2", "video_encoder.wmv2" },
+        { MEDIA_MIMETYPE_VIDEO_VC1,
+            "video_decoder.vc1", "video_encoder.vc1" },
+        { MEDIA_MIMETYPE_VIDEO_VP6,
+            "video_decoder.vp6", "video_encoder.vp6" },
+        { MEDIA_MIMETYPE_VIDEO_S263,
+            "video_decoder.s263", "video_encoder.s263" },
+        { MEDIA_MIMETYPE_VIDEO_MJPEG,
+            "video_decoder.mjpeg", "video_encoder.mjpeg" },
+        { MEDIA_MIMETYPE_VIDEO_MPEG1,
+            "video_decoder.mpeg1", "video_encoder.mpeg1" },
+        { MEDIA_MIMETYPE_VIDEO_MSMPEG4V1,
+            "video_decoder.msmpeg4v1", "video_encoder.msmpeg4v1" },
+        { MEDIA_MIMETYPE_VIDEO_MSMPEG4V2,
+            "video_decoder.msmpeg4v2", "video_encoder.msmpeg4v2" },
+        { MEDIA_MIMETYPE_VIDEO_DIVX,
+            "video_decoder.divx", "video_encoder.divx" },
+        { MEDIA_MIMETYPE_VIDEO_XVID,
+            "video_decoder.xvid", "video_encoder.xvid" },
+        { MEDIA_MIMETYPE_VIDEO_RXG2,
+            "video_decoder.rxg2", "video_encoder.rxg2" },
         { MEDIA_MIMETYPE_VIDEO_MPEG2,
             "video_decoder.mpeg2", "video_encoder.mpeg2" },
         { MEDIA_MIMETYPE_AUDIO_AC3,
@@ -3112,6 +3222,18 @@ static const struct VideoCodingMapEntry {
     { MEDIA_MIMETYPE_VIDEO_VP8, OMX_VIDEO_CodingVP8 },
     { MEDIA_MIMETYPE_VIDEO_VP9, OMX_VIDEO_CodingVP9 },
     { MEDIA_MIMETYPE_VIDEO_DOLBY_VISION, OMX_VIDEO_CodingDolbyVision },
+    { MEDIA_MIMETYPE_VIDEO_WMV1, OMX_VIDEO_CodingWMV1},
+    { MEDIA_MIMETYPE_VIDEO_WMV2, OMX_VIDEO_CodingWMV2},
+    { MEDIA_MIMETYPE_VIDEO_VC1, OMX_VIDEO_CodingWMV},
+    { MEDIA_MIMETYPE_VIDEO_VP6, OMX_VIDEO_CodingVP6},
+    { MEDIA_MIMETYPE_VIDEO_S263, OMX_VIDEO_CodingS263},
+    { MEDIA_MIMETYPE_VIDEO_MJPEG, OMX_VIDEO_CodingMJPEG},
+    { MEDIA_MIMETYPE_VIDEO_MPEG1, OMX_VIDEO_CodingMPEG1},
+    { MEDIA_MIMETYPE_VIDEO_MSMPEG4V1, OMX_VIDEO_CodingMSMPEG4V1},
+    { MEDIA_MIMETYPE_VIDEO_MSMPEG4V2, OMX_VIDEO_CodingMSMPEG4V2},
+    { MEDIA_MIMETYPE_VIDEO_DIVX, OMX_VIDEO_CodingDIVX},
+    { MEDIA_MIMETYPE_VIDEO_XVID, OMX_VIDEO_CodingXVID},
+    { MEDIA_MIMETYPE_VIDEO_RXG2, OMX_VIDEO_CodingRXG2},
 };
 
 static status_t GetVideoCodingTypeFromMime(
@@ -5513,6 +5635,7 @@ bool ACodec::BaseState::onOMXMessage(const sp<AMessage> &msg) {
             IOMX::buffer_id bufferID;
             CHECK(msg->findInt32("buffer", (int32_t*)&bufferID));
 
+            int32_t matrix_coeffs, video_full_range, transfer_characteristics;
             int32_t rangeOffset, rangeLength, flags, fenceFd;
             int64_t timeUs;
 
@@ -5521,6 +5644,24 @@ bool ACodec::BaseState::onOMXMessage(const sp<AMessage> &msg) {
             CHECK(msg->findInt32("flags", &flags));
             CHECK(msg->findInt64("timestamp", &timeUs));
             CHECK(msg->findInt32("fence_fd", &fenceFd));
+
+            CHECK(msg->findInt32("matrix_coeffs", &matrix_coeffs));
+            CHECK(msg->findInt32("video_full_range", &video_full_range));
+            CHECK(msg->findInt32("transfer_characteristics", &transfer_characteristics));
+
+            ALOGV("** ACODEC-message: %d, %d, %d",
+                matrix_coeffs,  video_full_range, transfer_characteristics);
+
+            int32_t index;
+            BufferInfo *info =
+                mCodec->findBufferByID(kPortIndexOutput, bufferID, &index);
+
+            if(info)
+            {
+                info->mMatrixCoeffs = matrix_coeffs;
+                info->mVideoFullRange = video_full_range;
+                info->mTransferCharacteristics = transfer_characteristics;
+            }
 
             return onOMXFillBufferDone(
                     bufferID,
@@ -5724,6 +5865,15 @@ void ACodec::BaseState::onInputBufferFilled(const sp<AMessage> &msg) {
                 int64_t timeUs;
                 CHECK(buffer->meta()->findInt64("timeUs", &timeUs));
 
+                if ((!mCodec->mFirstPTS) && (timeUs > 0) && mCodec->mIsVideo) {
+                    mCodec->mFirstPTS = true;
+                }
+
+                if (mCodec->mFirstPTS && timeUs == 0 && mCodec->mIsVideo) {
+                   timeUs = -1;
+                   buffer->meta()->setInt64("timeUs", timeUs);
+                }
+
                 OMX_U32 flags = OMX_BUFFERFLAG_ENDOFFRAME;
 
                 MetadataBufferType metaType = mCodec->mInputMetadataType;
@@ -5798,6 +5948,8 @@ void ACodec::BaseState::onInputBufferFilled(const sp<AMessage> &msg) {
                 info->checkReadFence("onInputBufferFilled");
 
                 status_t err2 = OK;
+//by zhengjiangwei for Recorder in  Android N
+#if 1
                 switch (metaType) {
                 case kMetadataBufferTypeInvalid:
                     break;
@@ -5829,7 +5981,8 @@ void ACodec::BaseState::onInputBufferFilled(const sp<AMessage> &msg) {
                     err2 = ERROR_UNSUPPORTED;
                     break;
                 }
-
+//by zhengjiangwei for Recorder in Android N
+#endif
                 if (err2 == OK) {
                     err2 = mCodec->mOMX->emptyBuffer(
                         mCodec->mNode,
@@ -6111,6 +6264,123 @@ bool ACodec::BaseState::onOMXFillBufferDone(
     return true;
 }
 
+static uint32_t getDataspace(int32_t mTransferCharacteristics,
+                                            int32_t mMatrixCoeffs,
+                                            int32_t mVideoFullRange)
+{
+    uint32_t space = HAL_DATASPACE_UNKNOWN;
+
+    switch (mTransferCharacteristics)
+    {
+        case VIDEO_TRANSFER_RESERVED_0:
+        case VIDEO_TRANSFER_BT1361:
+        case VIDEO_TRANSFER_UNSPECIFIED:
+        case VIDEO_TRANSFER_RESERVED_1:
+            space |= HAL_DATASPACE_TRANSFER_UNSPECIFIED;
+            break;
+        case VIDEO_TRANSFER_GAMMA2_2:
+            space |= HAL_DATASPACE_TRANSFER_GAMMA2_2;
+            break;
+        case VIDEO_TRANSFER_GAMMA2_8:
+            space |= HAL_DATASPACE_TRANSFER_GAMMA2_8;
+            break;
+        case VIDEO_TRANSFER_SMPTE_170M:
+            space |= HAL_DATASPACE_TRANSFER_SMPTE_170M;
+            break;
+        case VIDEO_TRANSFER_SMPTE_240M:
+            space |= HAL_DATASPACE_TRANSFER_UNSPECIFIED;
+            break;
+        case VIDEO_TRANSFER_LINEAR:
+            space |= HAL_DATASPACE_TRANSFER_LINEAR;
+            break;
+        case VIDEO_TRANSFER_LOGARITHMIC_0:
+        case VIDEO_TRANSFER_LOGARITHMIC_1:
+        case VIDEO_TRANSFER_IEC61966:
+        case VIDEO_TRANSFER_BT1361_EXTENDED:
+            space |= HAL_DATASPACE_TRANSFER_UNSPECIFIED;
+            break;
+        case VIDEO_TRANSFER_SRGB:
+            space |= HAL_DATASPACE_TRANSFER_SRGB;
+            break;
+        case VIDEO_TRANSFER_BT2020_0:
+        case VIDEO_TRANSFER_BT2020_1:
+            space |= HAL_DATASPACE_TRANSFER_UNSPECIFIED;
+            break;
+        case VIDEO_TRANSFER_ST2084:
+            space |= HAL_DATASPACE_TRANSFER_ST2084;
+            break;
+        case VIDEO_TRANSFER_ST428_1:
+            space |= HAL_DATASPACE_TRANSFER_UNSPECIFIED;
+            break;
+        case VIDEO_TRANSFER_HLG:
+            space |= HAL_DATASPACE_TRANSFER_HLG;
+            break;
+        default:
+            space |= HAL_DATASPACE_TRANSFER_UNSPECIFIED;
+            break;
+    }
+
+    switch (mMatrixCoeffs)
+    {
+        case VIDEO_MATRIX_COEFFS_IDENTITY:
+            space |= HAL_DATASPACE_STANDARD_UNSPECIFIED;
+            break;
+        case VIDEO_MATRIX_COEFFS_BT709:
+            space |= HAL_DATASPACE_STANDARD_BT709;
+            break;
+        case VIDEO_MATRIX_COEFFS_UNSPECIFIED_0:
+        case VIDEO_MATRIX_COEFFS_RESERVED_0:
+            space |= HAL_DATASPACE_STANDARD_UNSPECIFIED;
+            break;
+        case VIDEO_MATRIX_COEFFS_BT470M:
+            space |= HAL_DATASPACE_STANDARD_BT470M;
+            break;
+        case VIDEO_MATRIX_COEFFS_BT601_625_0:
+            space |= HAL_DATASPACE_BT601_625;
+            break;
+        case VIDEO_MATRIX_COEFFS_BT601_625_1:
+            space |= HAL_DATASPACE_BT601_525;
+            break;
+        case VIDEO_MATRIX_COEFFS_SMPTE_240M:
+        case VIDEO_MATRIX_COEFFS_YCGCO:
+            space |= HAL_DATASPACE_STANDARD_UNSPECIFIED;
+            break;
+        case VIDEO_MATRIX_COEFFS_BT2020:
+            space |= HAL_DATASPACE_STANDARD_BT2020;
+            break;
+        case VIDEO_MATRIX_COEFFS_BT2020_CONSTANT_LUMINANCE:
+            space |= HAL_DATASPACE_STANDARD_BT2020_CONSTANT_LUMINANCE;
+            break;
+        case VIDEO_MATRIX_COEFFS_SOMPATE:
+        case VIDEO_MATRIX_COEFFS_CD_NON_CONSTANT_LUMINANCE:
+        case VIDEO_MATRIX_COEFFS_CD_CONSTANT_LUMINANCE:
+        case VIDEO_MATRIX_COEFFS_BTICC:
+            space |= HAL_DATASPACE_STANDARD_UNSPECIFIED;
+            break;
+        default:
+            space |= HAL_DATASPACE_STANDARD_UNSPECIFIED;
+            break;
+    }
+
+    switch (mVideoFullRange)
+    {
+        case VIDEO_FULL_RANGE_LIMITED:
+            space |= HAL_DATASPACE_RANGE_LIMITED;
+            break;
+        case VIDEO_FULL_RANGE_FULL:
+            space |= HAL_DATASPACE_RANGE_FULL;
+            break;
+        default:
+        {
+            ALOGE("should not be here, mVideoFullRange = %d", mVideoFullRange);
+            //abort();
+        }
+    }
+
+    return space;
+}
+
+
 void ACodec::BaseState::onOutputBufferDrained(const sp<AMessage> &msg) {
     IOMX::buffer_id bufferID;
     CHECK(msg->findInt32("buffer-id", (int32_t*)&bufferID));
@@ -6132,12 +6402,28 @@ void ACodec::BaseState::onOutputBufferDrained(const sp<AMessage> &msg) {
         ALOGW_IF(err != NO_ERROR, "failed to set crop: %d", err);
     }
 
-    int32_t dataSpace;
-    if (msg->findInt32("dataspace", &dataSpace)
-            && dataSpace != mCodec->mLastNativeWindowDataSpace) {
+    uint32_t dataSpace = 0;
+    if (mCodec->mExtendFlag & AW_VIDEO_HDR_FLAG) {
+        uint32_t hdr_dataspace = getDataspace(info->mTransferCharacteristics,
+                                                         info->mMatrixCoeffs,
+                                                         info->mVideoFullRange);
+        dataSpace |= hdr_dataspace;
+        ALOGV("*** hdr_dataspace = %x, %d, %d, %d", hdr_dataspace,
+               info->mMatrixCoeffs,
+               info->mVideoFullRange,
+               info->mTransferCharacteristics);
+    } else {
+        int32_t msgDataSpace;
+        if (msg->findInt32("dataspace", &msgDataSpace)) {
+            dataSpace |= (uint32_t)msgDataSpace;
+        }
+    }
+
+
+    if (dataSpace != 0 && dataSpace != (uint32_t)mCodec->mLastNativeWindowDataSpace) {
         status_t err = native_window_set_buffers_data_space(
                 mCodec->mNativeWindow.get(), (android_dataspace)dataSpace);
-        mCodec->mLastNativeWindowDataSpace = dataSpace;
+        mCodec->mLastNativeWindowDataSpace = (int32_t)dataSpace;
         ALOGW_IF(err != NO_ERROR, "failed to set dataspace: %d", err);
     }
 
@@ -6368,6 +6654,24 @@ bool ACodec::UninitializedState::onAllocateComponent(const sp<AMessage> &msg) {
     uint32_t quirks = 0;
     int32_t encoder = false;
     if (msg->findString("componentName", &componentName)) {
+        // for youtube choice the hw video decoder
+        if (componentName.startsWith("OMX.google")) {
+            ALOGV("OMX.google change to hw video decoder!");
+            if (componentName.find("h264.decoder") >= 0) {
+                componentName = "OMX.allwinner.video.decoder.avc";
+            } else if (componentName.find("hevc.decoder")>= 0) {
+                componentName = "OMX.allwinner.video.decoder.hevc";
+            } else if (componentName.find("mpeg4.decoder")>= 0) {
+                componentName = "OMX.allwinner.video.decoder.mpeg4";
+            } else if (componentName.find("h263.decoder")>= 0) {
+                componentName = "OMX.allwinner.video.decoder.h263";
+            } else if (componentName.find("vp8.decoder")>= 0) {
+                componentName = "OMX.allwinner.video.decoder.vp8";
+            } else if (componentName.find("vp9.decoder")>= 0) {
+                componentName = "OMX.allwinner.video.decoder.vp9";
+            }
+        }
+
         sp<IMediaCodecList> list = MediaCodecList::getInstance();
         if (list != NULL && list->findCodecByName(componentName.c_str()) >= 0) {
             matchingCodecs.add(componentName);
@@ -7144,6 +7448,9 @@ bool ACodec::ExecutingState::onMessageReceived(const sp<AMessage> &msg) {
             if (err != OK) {
                 mCodec->signalError(OMX_ErrorUndefined, FAILED_TRANSACTION);
             } else {
+                if (mCodec->mIsVideo) {
+                    mCodec->mFirstPTS = false;
+                }
                 mCodec->changeState(mCodec->mFlushingState);
             }
 

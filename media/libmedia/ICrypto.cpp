@@ -315,6 +315,10 @@ status_t BnCrypto::onTransact(
             if (dstType == kDestinationTypeNativeHandle) {
                 nativeHandle = data.readNativeHandle();
                 dstPtr = static_cast<void *>(nativeHandle);
+
+                if(nativeHandle->numFds == 0 && nativeHandle->numInts == 1) {
+                    dstPtr = (void*)nativeHandle->data[0];
+                }
             } else if (dstType == kDestinationTypeOpaqueHandle) {
                 secureBufferId = reinterpret_cast<void *>(static_cast<uintptr_t>(data.readInt64()));
                 dstPtr = secureBufferId;

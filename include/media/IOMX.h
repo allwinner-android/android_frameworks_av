@@ -232,6 +232,11 @@ struct omx_message {
             OMX_U32 range_length;
             OMX_U32 flags;
             OMX_TICKS timestamp;
+
+            //* extend for hdr
+            OMX_U32 ext_video_full_range_flag;
+            OMX_U32 ext_transfer_characteristics;
+            OMX_U32 ext_matrix_coeffs;
         } extended_buffer_data;
 
         // if type == FRAME_RENDERED

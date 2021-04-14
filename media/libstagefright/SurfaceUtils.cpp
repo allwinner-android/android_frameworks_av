@@ -22,6 +22,8 @@
 
 #include <gui/Surface.h>
 
+#include <media/openmax/OMX_IVCommon.h>
+
 namespace android {
 
 status_t setNativeWindowSizeFormatAndUsage(
@@ -50,11 +52,21 @@ status_t setNativeWindowSizeFormatAndUsage(
         return err;
     }
 
-    err = native_window_set_buffers_format(nativeWindow, format);
-    if (err != NO_ERROR) {
-        ALOGE("native_window_set_buffers_format failed: %s (%d)", strerror(-err), -err);
-        return err;
-    }
+	if(format == OMX_COLOR_FormatYUV420Planar) {
+	    err = native_window_set_buffers_format(nativeWindow, HAL_PIXEL_FORMAT_YV12);
+	    if (err != NO_ERROR) {
+	        ALOGE("native_window_set_buffers_format failed: %s (%d)", strerror(-err), -err);
+	        return err;
+	    }
+
+	} else {
+	    err = native_window_set_buffers_format(nativeWindow, format);
+	    if (err != NO_ERROR) {
+	        ALOGE("native_window_set_buffers_format failed: %s (%d)", strerror(-err), -err);
+	        return err;
+	    }
+
+	}
 
     int transform = 0;
     if ((rotation % 90) == 0) {

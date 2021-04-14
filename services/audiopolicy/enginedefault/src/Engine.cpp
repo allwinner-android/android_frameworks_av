@@ -545,6 +545,18 @@ audio_devices_t Engine::getDeviceForStrategyInt(routing_strategy strategy,
     return device;
 }
 
+#include <fcntl.h>
+static int pt71600_get_num_remotes()
+{
+    int num_remotes = 0;
+    int fd = open("/proc/pt71600-num-remotes", O_RDONLY);
+    if (fd == -1)
+        return 0;
+    if (read(fd, &num_remotes, sizeof(num_remotes)) != sizeof(num_remotes))
+        num_remotes = 0;
+    close(fd);
+    return num_remotes;
+}
 
 audio_devices_t Engine::getDeviceForInputSource(audio_source_t inputSource) const
 {
@@ -554,6 +566,16 @@ audio_devices_t Engine::getDeviceForInputSource(audio_source_t inputSource) cons
     audio_devices_t availableDeviceTypes = availableInputDevices.types() & ~AUDIO_DEVICE_BIT_IN;
 
     uint32_t device = AUDIO_DEVICE_NONE;
+
+    if (availableDeviceTypes & AUDIO_DEVICE_IN_PT71600_REMOTE) {
+        if (inputSource == AUDIO_SOURCE_DEFAULT || inputSource == AUDIO_SOURCE_MIC
+            || inputSource == AUDIO_SOURCE_VOICE_RECOGNITION || inputSource == AUDIO_SOURCE_HOTWORD) {
+            if (pt71600_get_num_remotes() > 0) {
+                ALOGV("AUDIO_DEVICE_IN_PT71600_REMOTE");
+                return AUDIO_DEVICE_IN_PT71600_REMOTE;
+            }
+        }
+    }
 
     switch (inputSource) {
     case AUDIO_SOURCE_VOICE_UPLINK:
