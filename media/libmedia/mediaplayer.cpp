@@ -1002,6 +1002,44 @@ status_t MediaPlayer::setNextMediaPlayer(const sp<MediaPlayer>& next) {
     return mPlayer->setNextPlayer(next == NULL ? NULL : next->mPlayer);
 }
 
+status_t MediaPlayer::setSubDelay(int time)
+{
+    Mutex::Autolock lock(mLock);
+    mSubDelay = time;
+    if (mPlayer == NULL) {
+        return OK;
+    }
+    return mPlayer->setSubDelay(time);
+}
+
+int MediaPlayer::getSubDelay()
+{
+    Mutex::Autolock lock(mLock);
+    if (mPlayer == NULL) {
+        return -1;
+    }
+    return mPlayer->getSubDelay();
+}
+
+status_t MediaPlayer::setSubCharset(const char *charset)
+{
+    Mutex::Autolock lock(mLock);
+    strcpy(mSubCharset, charset);
+    if (mPlayer == NULL) {
+        return OK;
+    }
+    return mPlayer->setSubCharset(charset);
+}
+
+status_t MediaPlayer::getSubCharset(char *charset)
+{
+    Mutex::Autolock lock(mLock);
+    if (mPlayer == NULL) {
+        return NO_INIT;
+    }
+    return mPlayer->getSubCharset(charset);
+}
+
 VolumeShaper::Status MediaPlayer::applyVolumeShaper(
         const sp<VolumeShaper::Configuration>& configuration,
         const sp<VolumeShaper::Operation>& operation)

@@ -35,6 +35,8 @@
 #include <gui/Surface.h>
 #include <utils/String8.h>
 #include <cutils/properties.h>
+#include <cstdlib>
+#include <algorithm>
 
 #if LOG_NDEBUG
 #define UNUSED_UNLESS_VERBOSE(x) (void)(x)
@@ -298,9 +300,19 @@ status_t CameraSource::configureCamera(
         char buf[4];
         snprintf(buf, 4, "%d", frameRate);
         if (strstr(supportedFrameRates, buf) == NULL) {
-            ALOGE("Requested frame rate (%d) is not supported: %s",
-                frameRate, supportedFrameRates);
-            return BAD_VALUE;
+            std::vector<int> supportedFrameRatesVec;
+            char *tokenPtr=strtok(const_cast<char*>(supportedFrameRates), ",");
+            while (tokenPtr != NULL) {
+              supportedFrameRatesVec.push_back(atoi(tokenPtr));
+              tokenPtr=strtok(NULL, ",");
+            }
+            std::vector<int>::iterator maxFrameRate =
+              std::max_element(supportedFrameRatesVec.begin(),
+                  supportedFrameRatesVec.end());
+            ALOGW("Requested frame rate (%d) is not supported: %s "
+                "will choose (%d)",
+                frameRate, supportedFrameRates, *maxFrameRate);
+            frameRate = *maxFrameRate;
         }
 
         // The frame rate is supported, set the camera to the requested value.
@@ -400,9 +412,9 @@ status_t CameraSource::checkFrameRate(
     // Check the actual video frame rate against the target/requested
     // video frame rate.
     if (frameRate != -1 && (frameRateActual - frameRate) != 0) {
-        ALOGE("Failed to set preview frame rate to %d fps. The actual "
+        ALOGW("Failed to set preview frame rate to %d fps. The actual "
                 "frame rate is %d", frameRate, frameRateActual);
-        return UNKNOWN_ERROR;
+        //return UNKNOWN_ERROR;
     }
 
     // Good now.

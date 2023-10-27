@@ -164,7 +164,7 @@
             </Variant>
             <Feature name="adaptive-playback" />
         </MediaCodec>
-        <MediaCodec name="c2.android.vp9.decoder" type="video/x-vnd.on2.vp9" variant="slow-cpu,!slow-cpu">
+        <!--MediaCodec name="c2.android.vp9.decoder" type="video/x-vnd.on2.vp9" variant="slow-cpu,!slow-cpu">
             <Alias name="OMX.google.vp9.decoder" />
             <Limit name="alignment" value="2x2" />
             <Limit name="block-size" value="16x16" />
@@ -176,21 +176,21 @@
             </Variant>
             <Variant name="slow-cpu">
                 <Limit name="size" min="2x2" max="1280x1280" />
-                <Limit name="block-count" range="1-3600" /> <!-- max 1280x720 -->
+                <Limit name="block-count" range="1-3600" />
                 <Limit name="blocks-per-second" range="1-108000" />
                 <Limit name="bitrate" range="1-5000000" />
             </Variant>
             <Feature name="adaptive-playback" />
         </MediaCodec>
-        <MediaCodec name="c2.android.av1.decoder" type="video/av01" variant="!slow-cpu">
-            <Limit name="size" min="2x2" max="2048x2048" />
+        <MediaCodec name="c2.android.av1.decoder" type="video/av01" variant="slow-cpu,!slow-cpu">
+            <Limit name="size" min="2x2" max="1280x720" />
             <Limit name="alignment" value="2x2" />
             <Limit name="block-size" value="16x16" />
             <Limit name="block-count" range="1-16384" />
             <Limit name="blocks-per-second" range="1-2073600" />
             <Limit name="bitrate" range="1-120000000" />
             <Feature name="adaptive-playback" />
-        </MediaCodec>
+        </MediaCodec -->
         <MediaCodec name="c2.android.mpeg2.decoder" type="video/mpeg2" domain="tv">
             <Alias name="OMX.google.mpeg2.decoder" />
             <!-- profiles and levels:  ProfileMain : LevelHL -->

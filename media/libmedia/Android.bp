@@ -298,6 +298,7 @@ cc_library {
     srcs: [
         ":mediaextractorservice_aidl",
         "IDataSource.cpp",
+        "IHDCP.cpp",
         "BufferingSettings.cpp",
         "mediaplayer.cpp",
         "IMediaHTTPConnection.cpp",
@@ -361,6 +362,7 @@ cc_library {
         "libcamera_client",
         "libstagefright_foundation",
         "libgui",
+	"libui",
         "libdl",
         "libaudioclient",
         "libmedia_codeclist",

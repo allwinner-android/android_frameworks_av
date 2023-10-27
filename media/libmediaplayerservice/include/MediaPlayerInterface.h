@@ -52,6 +52,7 @@ enum player_type {
     // The shared library with the test player is passed passed as an
     // argument to the 'test:' url in the setDataSource call.
     TEST_PLAYER = 5,
+    AW_PLAYER = 6,
 };
 
 
@@ -306,6 +307,26 @@ public:
     }
     virtual status_t releaseDrm() {
         return INVALID_OPERATION;
+    }
+    /* expend interfaces about subtitle, track and so on */
+    virtual status_t setSubCharset(const char*  /* charset */)
+    {
+        return OK;
+    }
+
+    virtual status_t getSubCharset(char* /* charset */)
+    {
+        return OK;
+    }
+
+    virtual status_t setSubDelay(int /* time */)
+    {
+        return OK;
+    }
+
+    virtual int getSubDelay()
+    {
+        return -1;
     }
 
 private:

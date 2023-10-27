@@ -604,6 +604,42 @@ public:
 
         return reply.readInt32();
     }
+
+    status_t setSubCharset(const char *charset)
+    {
+        Parcel data, reply;
+        data.writeInterfaceToken(IMediaPlayer::getInterfaceDescriptor());
+        data.writeCString(charset);
+        remote()->transact(SET_SUB_CHARSET, data, &reply);
+        return reply.readInt32();
+    }
+
+    status_t getSubCharset(char *charset)
+    {
+        Parcel data, reply;
+        data.writeInterfaceToken(IMediaPlayer::getInterfaceDescriptor());
+        remote()->transact(GET_SUB_CHARSET, data, &reply);
+        status_t ret = reply.readInt32();
+        if(ret == OK)
+            strcpy(charset, reply.readCString());
+        return ret;
+    }
+    status_t setSubDelay(int time)
+    {
+        Parcel data, reply;
+        data.writeInterfaceToken(IMediaPlayer::getInterfaceDescriptor());
+        data.writeInt32(time);
+        remote()->transact(SET_SUB_DELAY, data, &reply);
+        return reply.readInt32();
+    }
+
+    int getSubDelay()
+    {
+        Parcel data, reply;
+        data.writeInterfaceToken(IMediaPlayer::getInterfaceDescriptor());
+        remote()->transact(GET_SUB_DELAY, data, &reply);
+        return reply.readInt32();
+    }
 };
 
 IMPLEMENT_META_INTERFACE(MediaPlayer, "android.media.IMediaPlayer");
@@ -948,7 +984,31 @@ status_t BnMediaPlayer::onTransact(
             }
             return NO_ERROR;
         } break;
-
+        case SET_SUB_CHARSET: {
+            CHECK_INTERFACE(IMediaPlayer, data, reply);
+            reply->writeInt32(setSubCharset(data.readCString()));
+            return NO_ERROR;
+        } break;
+        case GET_SUB_CHARSET: {
+            CHECK_INTERFACE(IMediaPlayer, data, reply);
+            char *charset = new char[MEDIAPLAYER_NAME_LEN_MAX];
+            status_t ret = getSubCharset(charset);
+            reply->writeInt32(ret);
+            if(ret == OK)
+                reply->writeCString(charset);
+            delete[] charset;
+            return NO_ERROR;
+        } break;
+        case SET_SUB_DELAY: {
+            CHECK_INTERFACE(IMediaPlayer, data, reply);
+            reply->writeInt32(setSubDelay(data.readInt32()));
+            return NO_ERROR;
+        } break;
+        case GET_SUB_DELAY: {
+            CHECK_INTERFACE(IMediaPlayer, data, reply);
+            reply->writeInt32(getSubDelay());
+            return NO_ERROR;
+        } break;
         // Modular DRM
         case PREPARE_DRM: {
             CHECK_INTERFACE(IMediaPlayer, data, reply);

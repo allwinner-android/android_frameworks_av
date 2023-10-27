@@ -27,4 +27,6 @@ enum AudioMode {
     IN_CALL = 2,
     IN_COMMUNICATION = 3,
     CALL_SCREEN = 4,
+    FM = 5,
+    MODE_FACTORY_TEST = 6,
 }

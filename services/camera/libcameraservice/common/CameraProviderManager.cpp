@@ -55,6 +55,13 @@ namespace {
 const bool kEnableLazyHal(property_get_bool("ro.camera.enableLazyHal", false));
 } // anonymous namespace
 
+static std::string getUvcFacing(){
+  char uvcFacing[1024];
+  memset(uvcFacing, 0, sizeof(uvcFacing));
+  property_get("ro.camera.uvcfacing", uvcFacing, "external");
+  return std::string(uvcFacing);
+}
+
 const float CameraProviderManager::kDepthARTolerance = .1f;
 
 CameraProviderManager::HardwareServiceInteractionProxy
@@ -419,9 +426,14 @@ status_t CameraProviderManager::openSession(const std::string &id,
 
 void CameraProviderManager::saveRef(DeviceMode usageType, const std::string &cameraId,
         sp<provider::V2_4::ICameraProvider> provider) {
-    if (!kEnableLazyHal) {
+    auto deviceInfo = findDeviceInfoLocked(cameraId);
+    if (deviceInfo == nullptr) return;
+    sp<ProviderInfo> parentProvider = deviceInfo->mParentProvider.promote();
+    auto type = parentProvider->getType();
+    if (!kEnableLazyHal || type.compare(std::string("external")) == 0) {
         return;
     }
+
     ALOGV("Saving camera provider %s for camera device %s", provider->descriptor, cameraId.c_str());
     std::lock_guard<std::mutex> lock(mProviderInterfaceMapLock);
     std::unordered_map<std::string, sp<provider::V2_4::ICameraProvider>> *primaryMap, *alternateMap;
@@ -443,7 +455,11 @@ void CameraProviderManager::saveRef(DeviceMode usageType, const std::string &cam
 }
 
 void CameraProviderManager::removeRef(DeviceMode usageType, const std::string &cameraId) {
-    if (!kEnableLazyHal) {
+    auto deviceInfo = findDeviceInfoLocked(cameraId);
+    if (deviceInfo == nullptr) return;
+    sp<ProviderInfo> parentProvider = deviceInfo->mParentProvider.promote();
+    auto type = parentProvider->getType();
+    if (!kEnableLazyHal || type.compare(std::string("external")) == 0) {
         return;
     }
     ALOGV("Removing camera device %s", cameraId.c_str());
@@ -1416,8 +1432,8 @@ status_t CameraProviderManager::ProviderInfo::initialize(
         ALOGW("%s: Unable to link to provider '%s' death notifications",
                 __FUNCTION__, mProviderName.c_str());
     }
-
-    if (!kEnableLazyHal) {
+    if (!kEnableLazyHal || mType.compare(std::string("external")) == 0) {
+    //if (!kEnableLazyHal) {
         // Save HAL reference indefinitely
         mSavedInterface = interface;
     } else {
@@ -1546,7 +1562,7 @@ CameraProviderManager::ProviderInfo::startProviderInterface() {
     if (mSavedInterface != nullptr) {
         return mSavedInterface;
     }
-    if (!kEnableLazyHal) {
+    if (!kEnableLazyHal || mType.compare(std::string("external")) == 0) {
         ALOGE("Bad provider state! Should not be here on a non-lazy HAL!");
         return nullptr;
     }
@@ -2404,9 +2420,8 @@ CameraProviderManager::ProviderInfo::DeviceInfo3::DeviceInfo3(const std::string&
             }
         }
     }
-
-    if (!kEnableLazyHal) {
-        // Save HAL reference indefinitely
+    auto type = parentProvider->getType();
+    if (!kEnableLazyHal || type.compare(std::string("external")) == 0) {
         mSavedInterface = interface;
     }
 }
@@ -2430,6 +2445,14 @@ status_t CameraProviderManager::ProviderInfo::DeviceInfo3::getCameraInfo(
                 break;
             case ANDROID_LENS_FACING_EXTERNAL:
                 // Map external to front for legacy API
+                 if (getUvcFacing().compare("front") == 0) {
+                  info->facing = hardware::CAMERA_FACING_FRONT;
+                } else if (getUvcFacing().compare("back") == 0) {
+                  info->facing = hardware::CAMERA_FACING_BACK;
+                } else {
+                  info->facing = hardware::CAMERA_FACING_EXTERNAL;
+                }
+                break;
             case ANDROID_LENS_FACING_FRONT:
                 info->facing = hardware::CAMERA_FACING_FRONT;
                 break;

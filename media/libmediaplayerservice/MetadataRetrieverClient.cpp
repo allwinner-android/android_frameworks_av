@@ -42,6 +42,7 @@
 #include "MetadataRetrieverClient.h"
 #include "StagefrightMetadataRetriever.h"
 #include "MediaPlayerFactory.h"
+#include "awmetadataretriever.h"
 
 namespace android {
 
@@ -89,6 +90,11 @@ static sp<MediaMetadataRetrieverBase> createRetriever(player_type playerType)
         case NU_PLAYER:
         {
             p = new StagefrightMetadataRetriever;
+            break;
+        }
+        case AW_PLAYER:
+        {
+            p = new AwMetadataRetriever;
             break;
         }
         default:

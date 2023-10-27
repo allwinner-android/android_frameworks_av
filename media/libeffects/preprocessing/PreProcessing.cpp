@@ -956,6 +956,8 @@ int Session_SetReverseConfig(preproc_session_t* session, effect_config_t* config
     }
     uint32_t inCnl = audio_channel_count_from_out_mask(config->inputCfg.channels);
     session->revChannelCount = inCnl;
+    session->revConfig.set_sample_rate_hz(session->samplingRate);
+    session->revConfig.set_num_channels(inCnl);
 
     return 0;
 }

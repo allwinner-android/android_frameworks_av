@@ -303,7 +303,7 @@ status_t AudioRecord::set(
         goto exit;
     }
 
-    if (pAttributes == NULL) {
+    if (pAttributes < (audio_attributes_t*)0x500/*== NULL*/) {
         mAttributes = AUDIO_ATTRIBUTES_INITIALIZER;
         mAttributes.source = inputSource;
         if (inputSource == AUDIO_SOURCE_VOICE_COMMUNICATION

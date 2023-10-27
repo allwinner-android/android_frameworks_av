@@ -23,6 +23,7 @@
 #include <utils/KeyedVector.h>
 #include <system/audio.h>
 
+#include <media/mediaplayerinfo.h>
 #include <media/AudioResamplerPublic.h>
 #include <media/stagefright/MediaSource.h>
 #include <media/VolumeShaper.h>
@@ -137,6 +138,10 @@ public:
     virtual status_t        setOutputDevice(audio_port_handle_t deviceId) = 0;
     virtual status_t        getRoutedDeviceId(audio_port_handle_t *deviceId) = 0;
     virtual status_t        enableAudioDeviceCallback(bool enabled) = 0;
+    virtual status_t        setSubCharset(const char *charset) = 0;
+    virtual status_t        getSubCharset(char *charset) = 0;
+    virtual status_t        setSubDelay(int time) = 0;
+    virtual int             getSubDelay() = 0;
 protected:
 
     friend class IMediaPlayerTest;
@@ -186,6 +191,11 @@ protected:
         SET_OUTPUT_DEVICE,
         GET_ROUTED_DEVICE_ID,
         ENABLE_AUDIO_DEVICE_CALLBACK,
+        /* expend interfaces about subtitle, track and so on */
+        SET_SUB_CHARSET,
+        GET_SUB_CHARSET,
+        SET_SUB_DELAY,
+        GET_SUB_DELAY,
     };
 };
 

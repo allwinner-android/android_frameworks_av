@@ -29,6 +29,7 @@
 #include <media/IMediaPlayer.h>
 #include <media/IMediaDeathNotifier.h>
 #include <media/IStreamSource.h>
+#include <media/mediaplayerinfo.h>
 #include <android/content/AttributionSourceState.h>
 
 #include <utils/KeyedVector.h>
@@ -94,6 +95,8 @@ enum media_error_type {
     // 2xx
     MEDIA_ERROR_NOT_VALID_FOR_PROGRESSIVE_PLAYBACK = 200,
     // 3xx
+    MEDIA_ERROR_IO = -1004,
+    MEDIA_ERROR_UNSUPPORTED = -1010,
 };
 
 
@@ -195,7 +198,10 @@ enum media_player_invoke_ids {
     INVOKE_ID_SELECT_TRACK = 4,
     INVOKE_ID_UNSELECT_TRACK = 5,
     INVOKE_ID_SET_VIDEO_SCALING_MODE = 6,
-    INVOKE_ID_GET_SELECTED_TRACK = 7
+    INVOKE_ID_GET_SELECTED_TRACK = 7,
+    INVOKE_ID_SET_DI_DEMO = 8,
+    INVOKE_ID_SET_DI_TNR = 9,
+    INVOKE_ID_SET_DI_FMD = 10,
 };
 
 // ----------------------------------------------------------------------------
@@ -281,6 +287,11 @@ public:
             status_t        setOutputDevice(audio_port_handle_t deviceId);
             audio_port_handle_t getRoutedDeviceId();
             status_t        enableAudioDeviceCallback(bool enabled);
+            // SubTitle
+            status_t        setSubCharset(const char *charset);
+            status_t        getSubCharset(char *charset);
+            status_t        setSubDelay(int time);
+            int             getSubDelay();
 
 private:
             void            clear_l();
@@ -318,6 +329,9 @@ private:
     struct sockaddr_in          mRetransmitEndpoint;
     bool                        mRetransmitEndpointValid;
     const android::content::AttributionSourceState mAttributionSource;
+    /* save properties before creating the real player */
+    int				mSubDelay;
+    char			mSubCharset[MEDIAPLAYER_NAME_LEN_MAX];
 };
 
 }; // namespace android

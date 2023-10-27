@@ -98,6 +98,8 @@ cc_defaults {
         "avc_utils.cpp",
         "base64.cpp",
         "hexdump.cpp",
+	"ANetworkSession.cpp",
+	"ParsedMessage.cpp",
     ],
 
     target: {

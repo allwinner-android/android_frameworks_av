@@ -243,6 +243,9 @@ public:
 
     virtual sp<IMediaCodecList> getCodecList() const;
 
+//    virtual sp<IOMX>            getOMX();
+    virtual sp<IHDCP>           makeHDCP(bool createEncryptionModule);
+
     virtual sp<IRemoteDisplay> listenForRemoteDisplay(const String16 &opPackageName,
             const sp<IRemoteDisplayClient>& client, const String8& iface);
     virtual status_t            dump(int fd, const Vector<String16>& args);
@@ -355,6 +358,11 @@ private:
         virtual status_t        setRetransmitEndpoint(const struct sockaddr_in* endpoint);
         virtual status_t        getRetransmitEndpoint(struct sockaddr_in* endpoint);
         virtual status_t        setNextPlayer(const sp<IMediaPlayer>& player);
+        /* expend interfaces about subtitle, track and so on */
+        virtual status_t        setSubCharset(const char *charset);
+        virtual status_t        getSubCharset(char *charset);
+        virtual status_t        setSubDelay(int time);
+        virtual int             getSubDelay();
 
         virtual media::VolumeShaper::Status applyVolumeShaper(
                                         const sp<media::VolumeShaper::Configuration>& configuration,
@@ -441,6 +449,10 @@ private:
 
         status_t setAudioAttributes_l(const Parcel &request);
 
+#if defined(SUPPORT_BDMV)
+        uint32_t checkAndMountISO(const char *filePath);
+#endif
+
         class Listener : public MediaPlayerBase::Listener {
         public:
             Listener(const wp<Client> &client) : mClient(client) {}
@@ -472,6 +484,9 @@ private:
                     bool                          mRetransmitEndpointValid;
                     sp<Client>                    mNextClient;
                     sp<MediaPlayerBase::Listener> mListener;
+                    /* save properties before creating the real player */
+                    int                           mSubDelay;
+                    char                          mSubCharset[MEDIAPLAYER_NAME_LEN_MAX];
 
         // Metadata filters.
         media::Metadata::Filter mMetadataAllow;  // protected by mLock
@@ -485,6 +500,11 @@ private:
 
         std::vector<DeathNotifier> mDeathNotifiers;
         sp<AudioDeviceUpdatedNotifier> mAudioDeviceUpdatedListener;
+
+#if defined(SUPPORT_BDMV)
+        sp<IBinder> isoManager;
+        bool isBlurayISO;
+#endif
 #if CALLBACK_ANTAGONIZER
                     Antagonizer*                  mAntagonizer;
 #endif

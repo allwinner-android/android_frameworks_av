@@ -2414,6 +2414,8 @@ void CCodec::initiateReleaseIfStuck() {
             MIMETYPE_VIDEO_MPEG4,
             MIMETYPE_VIDEO_H263,
             MIMETYPE_VIDEO_MPEG2,
+            MIMETYPE_VIDEO_MPEG1,
+            MIMETYPE_VIDEO_MJPEG,
             MIMETYPE_VIDEO_RAW,
             MIMETYPE_VIDEO_DOLBY_VISION,
 

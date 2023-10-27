@@ -81,6 +81,8 @@ void readFromAMessage(
 void writeToAMessage(const sp<AMessage> &msg, const BufferingSettings &buffering);
 void readFromAMessage(const sp<AMessage> &msg, BufferingSettings *buffering /* nonnull */);
 
+AString nameForFd(int fd);
+
 }  // namespace android
 
 #endif  // UTILS_H_

@@ -80,8 +80,18 @@
 #include "MetadataRetrieverClient.h"
 #include "MediaPlayerFactory.h"
 
+#if defined(SUPPORT_BDMV)
+#include <IISOMountManagerService.h>
+#endif
+
 #include "TestPlayerStub.h"
 #include "nuplayer/NuPlayerDriver.h"
+
+#include <media/stagefright/OMXClient.h>
+
+#include "HDCP.h"
+#include "HTTPBase.h"
+#include "RemoteDisplay.h"
 
 
 static const int kDumpLockRetries = 50;
@@ -256,6 +266,78 @@ void unmarshallAudioAttributes(const Parcel& parcel, audio_attributes_t *attribu
 
 
 namespace android {
+
+#if defined(SUPPORT_BDMV)
+#define ISO_MOUNT_PATH "/mnt/bluray"
+static const char *BDMV_URL = "bdmv://" ISO_MOUNT_PATH;
+
+static int isoMount(sp<IBinder> binder, const char *isoPath)
+{
+    sp<IISOMountManagerService> isoManager;
+
+    if (binder.get() == NULL) {
+        const sp<IServiceManager> sm(defaultServiceManager());
+        binder = sm->getService(String16("softwinner.isomountmanager"));
+        if (binder != 0) {
+            isoManager =interface_cast<IISOMountManagerService>(binder);
+        }
+    } else {
+        isoManager =interface_cast<IISOMountManagerService>(binder);
+    }
+
+    if (isoManager.get() != NULL) {
+        isoManager->umountAll();
+
+        if (isoManager->isoMount(ISO_MOUNT_PATH, isoPath) < 0)
+        {
+            ALOGE("mount iso failed!");
+            return -1;
+        }
+        return 0;
+    }
+
+    ALOGE("isoManager is null");
+    return -1;
+}
+
+static int isoUmount(sp<IBinder> binder)
+{
+    sp<IISOMountManagerService> isoManager;
+
+    if (binder.get() == NULL) {
+        const sp<IServiceManager> sm(defaultServiceManager());
+        binder = sm->getService(String16("softwinner.isomountmanager"));
+        if (binder != 0) {
+            isoManager =interface_cast<IISOMountManagerService>(binder);
+        }
+    } else {
+        isoManager =interface_cast<IISOMountManagerService>(binder);
+    }
+
+    if (isoManager.get() != NULL) {
+        return isoManager->umountAll();
+    }
+
+    return -1;
+}
+
+uint32_t MediaPlayerService::Client::checkAndMountISO(const char *filePath)
+{
+    if (strncasecmp(filePath + strlen(filePath) - 4, ".iso", 4))
+        return 'pass';
+
+    if (isoMount(isoManager, filePath) < 0)
+        return 'fail';
+
+    if (access(ISO_MOUNT_PATH "/BDMV/STREAM", R_OK)) {
+        ALOGW("not looks like bluray");
+        isoUmount(isoManager);
+        return 'fail';
+    }
+
+    return 'good';
+}
+#endif
 
 extern ALooperRoster gLooperRoster;
 
@@ -518,13 +600,29 @@ sp<IMediaCodecList> MediaPlayerService::getCodecList() const {
     return MediaCodecList::getLocalInstance();
 }
 
-sp<IRemoteDisplay> MediaPlayerService::listenForRemoteDisplay(
-        const String16 &/*opPackageName*/,
-        const sp<IRemoteDisplayClient>& /*client*/,
-        const String8& /*iface*/) {
-    ALOGE("listenForRemoteDisplay is no longer supported!");
+/*
+sp<IOMX> MediaPlayerService::getOMX() {
+    ALOGI("MediaPlayerService::getOMX");
+    Mutex::Autolock autoLock(mLock);
 
-    return NULL;
+    return mOmx;
+}*/
+
+sp<IHDCP> MediaPlayerService::makeHDCP(bool createEncryptionModule) {
+	ALOGE("the_hdcp, Unable to locate libstagefright_hdcp.so");
+    return new HDCP(createEncryptionModule);
+}
+
+sp<IRemoteDisplay> MediaPlayerService::listenForRemoteDisplay(
+        const String16 &opPackageName,
+        const sp<IRemoteDisplayClient>& client,
+        const String8& iface) {
+    ALOGE("listenForRemoteDisplay is no longer supported!");
+    if (!checkPermission("android.permission.CONTROL_WIFI_DISPLAY")) {
+        return NULL;
+    }
+
+    return new RemoteDisplay(opPackageName, client, iface.string());
 }
 
 status_t MediaPlayerService::AudioOutput::dump(int fd, const Vector<String16>& args) const
@@ -762,6 +860,9 @@ MediaPlayerService::Client::Client(
     mAudioAttributes = NULL;
     mListener = new Listener(this);
 
+#if defined(SUPPORT_BDMV)
+    isBlurayISO = false;
+#endif
 #if CALLBACK_ANTAGONIZER
     ALOGD("create Antagonizer");
     mAntagonizer = new Antagonizer(mListener);
@@ -988,6 +1089,21 @@ status_t MediaPlayerService::Client::setDataSource(
         }
     }
 
+#if defined(SUPPORT_BDMV)
+    if (strncasecmp(url, "file://", 7) == 0) {
+        switch (checkAndMountISO(url + 7)) {
+            case 'pass':
+                break;
+            case 'good':
+                isBlurayISO = true;
+                url = BDMV_URL;
+                break;
+            case 'fail':
+                return UNKNOWN_ERROR;
+        }
+    }
+#endif
+
     if (strncmp(url, "content://", 10) == 0) {
         // get a filedescriptor for the content Uri and
         // pass it to the setDataSource(fd) method
@@ -1008,6 +1124,10 @@ status_t MediaPlayerService::Client::setDataSource(
         if (p == NULL) {
             return NO_INIT;
         }
+
+        //* save properties before creating the real player
+        p->setSubDelay(mSubDelay);
+        p->setSubCharset(mSubCharset);
 
         return mStatus =
                 setDataSource_post(
@@ -1041,6 +1161,26 @@ status_t MediaPlayerService::Client::setDataSource(int fd, int64_t offset, int64
         ALOGV("calculated length = %lld", (long long)length);
     }
 
+#if defined(SUPPORT_BDMV)
+    // check if it is bluray
+        char fdInProc[128] = {0};
+        snprintf(fdInProc, sizeof(fdInProc), "proc/self/fd/%d", fd);
+        char filePath[1024] = {0};
+        ssize_t len = readlink(fdInProc, filePath, sizeof(filePath) - 1);
+        ALOGV("file path %s", filePath);
+        if (len > 0) {
+            switch (checkAndMountISO(filePath)) {
+                case 'pass':
+                    break;
+                case 'good':
+                    isBlurayISO = true;
+                    return setDataSource(NULL, BDMV_URL, NULL);
+                case 'fail':
+                    return UNKNOWN_ERROR;
+            }
+        }
+#endif
+
     player_type playerType = MediaPlayerFactory::getPlayerType(this,
                                                                fd,
                                                                offset,
@@ -1049,6 +1189,10 @@ status_t MediaPlayerService::Client::setDataSource(int fd, int64_t offset, int64
     if (p == NULL) {
         return NO_INIT;
     }
+
+    //* save properties before creating the real player
+    p->setSubDelay(mSubDelay);
+    p->setSubCharset(mSubCharset);
 
     // now set data source
     return mStatus = setDataSource_post(p, p->setDataSource(fd, offset, length));
@@ -1280,6 +1424,10 @@ status_t MediaPlayerService::Client::stop()
     ALOGV("[%d] stop", mConnId);
     sp<MediaPlayerBase> p = getPlayer();
     if (p == 0) return UNKNOWN_ERROR;
+#if defined(SUPPORT_BDMV)
+    if (isBlurayISO)
+        isoUmount(isoManager);
+#endif
     return p->stop();
 }
 
@@ -1452,6 +1600,10 @@ status_t MediaPlayerService::Client::reset()
     mRetransmitEndpointValid = false;
     sp<MediaPlayerBase> p = getPlayer();
     if (p == 0) return UNKNOWN_ERROR;
+#if defined(SUPPORT_BDMV)
+    if (isBlurayISO)
+        isoUmount(isoManager);
+#endif
     return p->reset();
 }
 
@@ -1749,6 +1901,41 @@ status_t MediaPlayerService::Client::enableAudioDeviceCallback(bool enabled)
         }
     }
     return NO_INIT;
+}
+
+/* expend interfaces about subtitle, track and so on */
+status_t MediaPlayerService::Client::setSubCharset(const char *charset)
+{
+    strcpy(mSubCharset, charset);
+    sp<MediaPlayerBase> p = getPlayer();
+    if (p == 0)
+        return OK;
+    return p->setSubCharset(charset);
+}
+
+status_t MediaPlayerService::Client::getSubCharset(char *charset)
+{
+    sp<MediaPlayerBase> p = getPlayer();
+    if (p == 0)
+        return UNKNOWN_ERROR;
+    return p->getSubCharset(charset);
+}
+
+status_t MediaPlayerService::Client::setSubDelay(int time)
+{
+    mSubDelay = time;
+    sp<MediaPlayerBase> p = getPlayer();
+    if (p == 0)
+        return OK;
+    return p->setSubDelay(time);
+}
+
+int MediaPlayerService::Client::getSubDelay()
+{
+    sp<MediaPlayerBase> p = getPlayer();
+    if (p == 0)
+        return 0;
+    return p->getSubDelay();
 }
 
 #if CALLBACK_ANTAGONIZER

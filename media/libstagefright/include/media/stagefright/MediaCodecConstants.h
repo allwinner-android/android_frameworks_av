@@ -699,10 +699,11 @@ constexpr char MIMETYPE_VIDEO_HEVC[] = "video/hevc";
 constexpr char MIMETYPE_VIDEO_MPEG4[] = "video/mp4v-es";
 constexpr char MIMETYPE_VIDEO_H263[] = "video/3gpp";
 constexpr char MIMETYPE_VIDEO_MPEG2[] = "video/mpeg2";
+constexpr char MIMETYPE_VIDEO_MPEG1[] = "video/mpeg1";
+constexpr char MIMETYPE_VIDEO_MJPEG[] = "video/x-motion-jpeg";
 constexpr char MIMETYPE_VIDEO_RAW[] = "video/raw";
 constexpr char MIMETYPE_VIDEO_DOLBY_VISION[] = "video/dolby-vision";
 constexpr char MIMETYPE_VIDEO_SCRAMBLED[] = "video/scrambled";
-
 constexpr char MIMETYPE_AUDIO_AMR_NB[] = "audio/3gpp";
 constexpr char MIMETYPE_AUDIO_AMR_WB[] = "audio/amr-wb";
 constexpr char MIMETYPE_AUDIO_MPEG[] = "audio/mpeg";

@@ -37,6 +37,7 @@ enum {
     CAMERA_FACING_BACK = 0,
     /** The facing of the camera is the same as that of the screen. */
     CAMERA_FACING_FRONT = 1,
+    CAMERA_FACING_EXTERNAL = 2,
 };
 
 struct CameraInfo : public android::Parcelable {
